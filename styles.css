@@ -1,0 +1,177 @@
+:root {
+    --light_gray: #ccc;
+    --white: #ffffff;
+    --light_blue: #83a4eb;
+    --red: #e8493a;
+    --dark_gray: #5d6169;
+}
+* {
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 12px;
+    margin: 0;
+    padding: 0;
+}
+.red-text {
+    color: var(--red);
+}
+.hidden {
+    display: none;
+}
+
+ul {
+    position: absolute;
+    display: none;
+    z-index: 1;
+}
+ul li {
+    list-style-type: none;
+    border: 1px solid var(--light_gray);
+    background-color: var(--white);
+    font-size: 16px;
+    padding: 1px 5px;
+}
+ul:hover {
+    cursor: pointer;
+}
+
+.modal-menu {
+    position: fixed;
+    top: 12.5%; left: 25%;
+    width: 50%;
+    height: 75%;
+    padding: 1% 2%;
+}
+.modal-menu.open {
+    display: block;
+    background-color: var(--white);
+    border: 1px solid var(--light_gray);
+}
+.modal-menu.closed {
+    display: none;
+}
+.modal-menu .modal-buttons {
+    position: absolute;
+    right: 0; bottom: 1%;
+    margin-right: 3%;
+    display: flex;
+    flex-direction: row;
+    min-width: 10%;
+    max-width: 25%;
+    gap: 10px;
+    cursor: pointer;
+}
+.modal-menu .modal-buttons > * {
+    font-size: 15px;
+    font-weight: 700;
+    padding: 5px 7px;
+    border: 1px solid var(--light_gray);
+    border-radius: 22%;
+}
+.modal-menu .modal-buttons #save_button {
+    color: var(--light_blue);
+}
+.modal-menu .field-row {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+.modal-menu .field-row > * {
+    width: 100%;
+    padding: 1%;
+    text-overflow: ellipsis;
+    white-space: wrap;
+}
+.modal-menu .field-row label {
+    display: block;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--dark_gray);
+}
+.modal-menu.field-row input {
+    text-wrap: wrap;
+}
+.modal-menu .field-row textarea {
+    height: auto;
+    min-height: 200px;
+    max-height: 60%;
+    resize: none;
+}
+
+#email_container {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+    width: 80%;
+    height: 100%;
+    margin: auto;
+    border: 1px solid var(--light_gray);
+}
+#email_header {
+    font-weight: bold;
+}
+#email_table {
+    border: 1px solid var(--light_gray);
+    flex-grow: 1;
+    width: auto;
+    min-width: 50%;
+}
+#email_preview {
+    padding: 2% 5% 2% 2%;
+    min-width: 50%;
+    position: relative;
+    margin: 1%;
+    display: none;
+}
+#email_preview > *:not(:last-child) {
+    padding-bottom: 3%;
+}
+#close_preview_button {
+    font-size: 18px;
+}
+#close_preview_button:hover {
+    cursor: pointer;
+}
+
+.table-row {
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid var(--light_gray);
+}
+.table-row:not(#email_header .table-row):hover {
+    cursor: pointer;
+    background-color: lightblue;
+}
+
+.column {
+    padding: 10px;
+    min-height: 15px;
+    text-wrap: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.column:not(:last-child) {
+    margin-right: 10px;
+    border-right: 1px solid var(--light_gray);
+}
+.read {
+    min-width: 70px;
+    max-width: 70px;
+    text-align: center;
+}
+.recipients {
+    min-width: 90px;
+    width: 25%;
+}
+.subject {
+    min-width: 70px;
+    width: 25%;
+}
+.message {
+    width: 67%;
+}
+
+#email_row_dropdown[data-read="true"] #mark_read_option,
+#email_row_dropdown[data-read="false"] #mark_unread_option {
+    display: none;
+}

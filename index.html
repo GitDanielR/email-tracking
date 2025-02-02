@@ -1,0 +1,61 @@
+<script type="text/template" id="row_template">
+    <div class="table-row" id="%id%" data-activates="email_row_dropdown">
+        <div class="column read">%is_read%</div>
+        <div class="column recipients">%recipients%</div>
+        <div class="column subject">%subject%</div>
+        <div class="column message">%message%</div>
+    </div>
+</script>
+<script type="text/template" id="email_preview_template">
+    <div style="position:absolute;right:5%;top:1%" onclick="Events.closeEmailPreview()" id="close_preview_button" class="red-text">X</div>
+    <div><b>Recipients:</b> %recipients%</div>
+    <div><b>Subject:</b> %subject%</div>
+    <div><b>Message:</b> %message%</div>
+</script>
+<script type="text/template" id="new_email_template">
+    <div class="field-row">
+        <label for="email_modal_recipients">Recipients</label>
+        <input id="email_modal_recipients"></input>
+    </div>
+    <div class="field-row">
+        <label for="email_modal_subject">Subject</label>
+        <input id="email_modal_subject"></input>
+    </div>
+    <div class="field-row">
+        <label for="email_modal_message">Message</label>
+        <textarea id="email_modal_message"></textarea>
+    </div>
+    <div class="modal-buttons">
+        <div id="save_button"></div>
+        <div id="close_button" class="red-text">Close</div>
+    </div>
+</script>
+
+<head>
+    <script src="index.js" type="text/javascript"></script>
+    <link rel="stylesheet" type="text/css" href="styles.css"></script>
+</head>
+<body>
+    <div id="email_container">
+        <div id="email_table">
+            <div id="email_header">
+                <div class="table-row">
+                    <div class="column read" data-sort="is_read">Read <span>&#9650;</span></div>
+                    <div class="column recipients" data-sort="recipients_string">Recipients <span class="hidden">&#9650;</span></div>
+                    <div class="column subject" data-sort="subject">Subject <span class="hidden">&#9650;</span></div>
+                    <div class="column message" data-sort="message">Message <span class="hidden">&#9650;</span></div>
+                </div>
+            </div>
+            <div id="email_body"></div>
+        </div>
+        <div id="email_preview"></div>
+    </div>
+</body>
+
+<ul id="email_row_dropdown">
+    <li data-action="new_email">New</li>
+    <li data-action="edit_email">Edit</li>
+    <li data-action="mark_read" id="mark_read_option">Mark Read</li>
+    <li data-action="mark_unread" id="mark_unread_option">Mark Unread</li>
+    <li class="red-text" data-action="delete_email">Delete</li>
+</ul>
