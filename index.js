@@ -13,25 +13,13 @@ class idHandler {
         this.ids.fill(undefined, index, this.ids.length);
         return index;
     }
+
+    static delete(id) {
+        this.ids[id] = undefined;
+    }
 }
 
 const Class = {};
-Class.Email = class extends idHandler {
-    constructor (is_read, subject, message, recipients) {
-        super();
-        this.id = Class.Email.getNextId();
-        Class.Email.ids[this.id] = true;
-        this.is_read = is_read;
-        this.subject = subject;
-        this.message = message;
-        this.updateRecipients(recipients);
-    }
-
-    updateRecipients (recipients) {
-        this.recipients = Util.getUnique(recipients);
-        this.recipients_string = Util.getContactString(this.recipients);
-    }
-}
 Class.Contact = class extends idHandler {
     constructor (first_name, last_name) {
         super();
@@ -45,6 +33,32 @@ Class.Contact = class extends idHandler {
         return this.first_name + " " + this.last_name;
     }
 }
+Class.Email = class extends idHandler {
+    constructor (is_read, subject, message, recipients, folder_id) {
+        super();
+        this.id = Class.Email.getNextId();
+        Class.Email.ids[this.id] = true;
+        this.is_read = is_read;
+        this.subject = subject;
+        this.message = message;
+        this.folder_id = folder_id ?? -1;
+        this.updateRecipients(recipients);
+    }
+
+    updateRecipients (recipients) {
+        this.recipients = Util.getUnique(recipients);
+        this.recipients_string = Util.getContactString(this.recipients);
+    }
+}
+Class.Folder = class extends idHandler {
+    constructor(name, parent) {
+        super();
+        this.id = Class.Folder.getNextId();
+        Class.Folder.ids[this.id] = true;
+        this.name = name;
+        this.parent = parent ?? -1;
+    }
+}
 
 let Master = {};
 Master.Storage = {
@@ -55,35 +69,94 @@ let Email = {};
 Email.load = function  () {
     Util.generateContacts(10);
     Util.generateEmails(15);
+    Util.generateFolders(3);
     Email.UI.init();
 };
 
 Email.UI = {
     resource: {
         currentItems: [],
+        currentFolder: -1,
+        filteredItems: [],
+        filteredFolders: [],
+        folders: [],
         sortDir: "asc",
         sortType: "is_read"
     },
     templates: {
-        rowTemplate: document.getElementById("row_template").innerHTML,
-        emailPreviewTemplate: document.getElementById("email_preview_template").innerHTML
+        breadcrumbs: document.getElementById("breadcrumb_template").innerHTML,
+        emailPreviewTemplate: document.getElementById("email_preview_template").innerHTML,
+        rowTemplate: document.getElementById("row_template").innerHTML
     },
     init: function () {
         this.buildTable();
     },
     buildTable: function () {
+        Util.filterResources();
         Util.sortResources();
-        let html = Email.UI.resource.currentItems.reduce((aggregate, email) => {
+        let html = "";
+        html += Email.UI.resource.filteredFolders.reduce((aggregate, folder) => {
+            return  aggregate + Util.templateHelper(Email.UI.templates.rowTemplate, {
+                id: folder.id,
+                activates: "folder_row_dropdown",
+                is_folder: 1,
+                is_read: "&#128193;",
+                subject: "",
+                message: folder.name,
+                recipients: ""
+            });
+        }, "");
+        html += Email.UI.resource.filteredItems.reduce((aggregate, email) => {
             return aggregate + Util.templateHelper(Email.UI.templates.rowTemplate, {
                 id: email.id,
+                activates: "email_row_dropdown",
+                is_folder: 0,
                 is_read: email.is_read ? "" : "&#x2022;",
                 subject: email.subject,
                 message: email.message,
                 recipients: email.recipients_string
             });
         }, "");
-        document.getElementById("email_body").innerHTML = html;
-        Email.UI.bindEvents();
+
+        if (Email.UI.resource.filteredItems.length === 0) {
+            document.getElementById("email_header").classList.add("hidden");
+            EmptyView.create({
+                $container: document.getElementById("email_body"),
+                names: {
+                    title: "No Emails",
+                    message: Email.UI.resource.currentFolder !== -1 ? `No emails in folder ${Util.getFolder(Email.UI.resource.currentFolder).name}.` : "You have no emails.",
+                    create_new_description: "Send Email"
+                },
+                create: function () {
+                    Dropdowns.email_row_dropdown.new_email();
+                }
+            });
+        } else {
+            document.getElementById("email_header").classList.remove("hidden");
+            document.getElementById("email_body").innerHTML = html;
+            Email.UI.bindEvents();
+        }
+    },
+    buildBreadcrumbs: function () {
+        let folderPath = [];
+        let currentFolder = Util.getFolder(Email.UI.resource.currentFolder);
+        while (currentFolder !== undefined) {
+            folderPath.push(currentFolder);
+            currentFolder = Util.getFolder(currentFolder?.parent);
+        }
+        folderPath.push(undefined);
+        folderPath.reverse();
+
+        let folderHtmls = folderPath.map(folder => {
+            return Util.templateHelper(Email.UI.templates.breadcrumbs, {
+                id: folder ? folder.id : -1,
+                name: folder ? folder.name : "Home"
+            });
+        });
+        document.getElementById("breadcrumbs").innerHTML = folderHtmls.join("<div> <b>></b></div>");
+        document.querySelectorAll(".breadcrumbs").forEach($breadcrumb => {
+            $breadcrumb.addEventListener("click", Events.switchFolder);
+        });
     },
     bindEvents: function (emailId) {
         if (emailId === undefined) {
@@ -104,7 +177,7 @@ Email.UI = {
         }
     },
     showEmailPreview: function (emailId) {
-        let email = Email.UI.resource.currentItems.find(email => email.id === emailId);
+        let email = Util.getEmail(emailId);
         email.is_read = true;
         let emailHtml = Util.templateHelper(Email.UI.templates.emailPreviewTemplate, {
             recipients: email.recipients_string,
@@ -127,8 +200,8 @@ Email.UI = {
         });
         Email.UI.bindEvents(email.id);
     },
-    deleteRow: function (emailId) {
-        let $row = document.getElementById(emailId);
+    deleteRow: function (id) {
+        let $row = document.getElementById(id);
         $row.remove();
     }
 };
@@ -137,13 +210,19 @@ let Events = {
     showDropdownOptions: function (e) {
         e.preventDefault();
 
-        let email = Email.UI.resource.currentItems.find(email => email.id == e.target.parentElement.id);
         let dropdownId = e.target.parentElement.dataset.activates;
         let $dropdown = document.getElementById(dropdownId);
         $dropdown.style.display = "block";
         $dropdown.style.top = e.clientY + "px";
         $dropdown.style.left = (e.clientX + 10) + "px";
-        $dropdown.dataset.read = email.is_read;
+        document.querySelectorAll(`ul:not(#${dropdownId})`).forEach($otherDropdown => {
+            $otherDropdown.style.display = "none";
+        });
+
+        let item = dropdownId === "email_row_dropdown" ? Util.getEmail(e.target.parentElement.id) : Util.getFolder(e.target.parentElement.id);
+        for (const [key, value] of Object.entries(item)) {
+            $dropdown.dataset[key] = value;
+        }
 
         const closeDropdown = function (event) {
             $dropdown.style.display = "none";
@@ -152,6 +231,7 @@ let Events = {
         document.addEventListener("click", closeDropdown);
 
         const handleDropdownClick = function (event) {
+            Events.closeEmailPreview();
             Dropdowns[$dropdown.id][event.target.dataset.action](e.target.parentElement.id);
             Array.from($dropdown.children).forEach(dropdownOption => {
                 dropdownOption.removeEventListener("click", handleDropdownClick);
@@ -163,7 +243,7 @@ let Events = {
     },
     showEmailPreview: function (e) {
         const emailId = e.target.parentElement.id;
-        Email.UI.showEmailPreview(parseInt(emailId));
+        Email.UI.showEmailPreview(emailId);
     },
     closeEmailPreview: function (e) {
         document.getElementById("email_preview").style.display = "none";
@@ -176,7 +256,7 @@ let Events = {
         });
         const sortType = e.target.dataset.sort;
         if (sortType === Email.UI.resource.sortType) {
-            if (sortType !== "read" && Email.UI.resource.sortDir === "desc") {
+            if (Email.UI.resource.sortDir === "desc") {
                 Email.UI.resource.sortType = "is_read";
                 Email.UI.resource.sortDir = "asc";
             } else {
@@ -193,16 +273,33 @@ let Events = {
         }
         Util.sortResources();
         Email.UI.buildTable();
+    },
+    switchFolder: function (e) {
+        let folderId = e.target.parentElement.dataset.id;
+        Util.setFolder(folderId);
     }
 };
 
 let Util = {
+    getEmail: function (id) {
+        return Email.UI.resource.currentItems.find(email => email.id == id);
+    },
+    getFolder: function (id) {
+        if (id === undefined) {
+            return undefined;
+        }
+        return Email.UI.resource.folders.find(folder => folder.id == id);
+    },
     templateHelper: function (template, obj) {
         let html = template;
         for (const [key, value] of Object.entries(obj)) {
             html = html.replace('%' + key + '%', value);
         }
         return html;
+    },
+    filterResources: function () {
+        Email.UI.resource.filteredItems = Email.UI.resource.currentItems.filter(email => email.folder_id == Email.UI.resource.currentFolder);
+        Email.UI.resource.filteredFolders = Email.UI.resource.folders.filter(folder => folder.parent == Email.UI.resource.currentFolder);
     },
     sortResources: function () {
         let compareFunction;
@@ -215,10 +312,46 @@ let Util = {
                 return a[Email.UI.resource.sortType] - b[Email.UI.resource.sortType];
             }
         }
-        Email.UI.resource.currentItems.sort(compareFunction);
+        Email.UI.resource.filteredItems.sort(compareFunction);
+        Email.UI.resource.filteredFolders.sort(function (a,b) {
+            return a.name.localeCompare(b.name);
+        });
         if (Email.UI.resource.sortDir === "desc") {
-            Email.UI.resource.currentItems.reverse();
+            Email.UI.resource.filteredItems.reverse();
+            Email.UI.resource.filteredFolders.reverse();
         }
+    },
+    selectFolder: function (excludedFolder) {
+        return new Promise((resolve, reject) => {
+            let genericInput = Email.UI.resource.filteredFolders.reduce((aggregate, folder) => {
+                if (folder.id === excludedFolder) {
+                    return aggregate;
+                }
+                return aggregate + `<option value="${folder.id}">${folder.name}</option>`;
+            }, "<select id='generic_input'>");
+            ModalMenu.open({
+                id: "move_to_folder",
+                template: "generic_input_template",
+                names: {
+                    input_label: "Destination folder",
+                    generic_input: genericInput + "</select>",
+                    save_button_name: "Move"
+                },
+                buttons: {
+                    save: function (folder_id) {
+                        resolve(folder_id);
+                    }
+                },
+                onCloseCallback: function () {
+                    resolve(undefined);
+                }
+            });
+        });
+    },
+    setFolder: function (folderId) {
+        Email.UI.resource.currentFolder = folderId;
+        Email.UI.buildBreadcrumbs();
+        Email.UI.buildTable();
     },
     getContactString: function (contactIds) {
         return contactIds.map(contactId => Master.Storage.contacts.find(c => c.id === contactId).displayName).join(", ");
@@ -273,18 +406,48 @@ let Util = {
         ];
         
         const getRandomWords = function (count) {
-            return Array.from({ length: count }, () => words[Math.floor(Math.random() * words.length)]).join(" ");
+            return Array.from({ length: count }, () => words[getRandomNumber(0, words.length - 1)]).join(" ");
+        };
+        const getRandomContactId = function () {
+            return Master.Storage.contacts[getRandomNumber(0, Master.Storage.contacts.length - 1)].id;
+        };
+        const getRandomNumberWords = function (min, max) {
+            return getRandomWords(getRandomNumber(min, max));
+        };
+        const getRandomNumber = function (min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
         }
         
         for (let i = 0; i < numberEmails; i++) {
-            let email = new Class.Email(Math.random() < 0.5, getRandomWords(Math.floor(Math.random() * 11) + 5), getRandomWords(Math.floor(Math.random() * 100) + 60), Array.from({ length: Math.floor(Math.random() * 10) + 1}, () => Master.Storage.contacts[Math.floor(Math.random() * Master.Storage.contacts.length)].id));
+            let email = new Class.Email(Math.random() < 0.5, getRandomNumberWords(5, 15), getRandomNumberWords(60, 120), Array.from({ length: getRandomNumber(1, Master.Storage.contacts.length)}, () => getRandomContactId()), -1);
             Email.UI.resource.currentItems.push(email);
+        }
+    },
+    generateFolders: function (numberFolders) {
+        const folderNames = [
+            "Work", "School", "College", "UDA Technologies", "Relatives", "Spam", "Trash", "Junk"
+        ];
+        
+        let folderNamesUsed = [];
+        let numberFoldersMade = 0;
+        let numberFoldersToMake = Math.min(numberFolders, folderNames.length);
+        while (numberFoldersMade < numberFoldersToMake) {
+            let folderIndex = Math.floor(Math.random() * folderNames.length);
+            if (!folderNamesUsed.includes(folderIndex)) {
+                folderNamesUsed.push(folderIndex);
+                let folder = new Class.Folder(folderNames[folderIndex]);
+                Email.UI.resource.folders.push(folder);   
+                numberFoldersMade++;
+            }
         }
     }
 };
 
 let ModalMenu = {
-    html: document.getElementById("new_email_template").innerHTML,
+    templates: {
+        "new_email_template": document.getElementById("new_email_template").innerHTML,
+        "generic_input_template": document.getElementById("generic_input_template").innerHTML
+    },
     loadedModals: [],
     open: function (options) {
         var $modal;
@@ -299,36 +462,21 @@ let ModalMenu = {
             oldClose.parentNode.replaceChild(oldClose.cloneNode(true), oldClose);
         } else {
             $modal = document.createElement("div");
-            $modal.innerHTML = ModalMenu.html;
             $modal.id = options.id;
             $modal.classList.add("modal-menu", "open");
             document.body.appendChild($modal);
+            ModalMenu.loadedModals.push(options.id);
             $modal = document.getElementById($modal.id);
         }
-        $modal.querySelector("#save_button").innerHTML = options.email ? "Save" : "Create";
-        if (options.email !== undefined) {
-            $modal.querySelector("#email_modal_recipients").value = Util.getContactString(options.email.recipients);
-            $modal.querySelector("#email_modal_subject").value = options.email.subject;
-            $modal.querySelector("#email_modal_message").innerHTML = options.email.message;
-        } else if (modalOpen) {
-            $modal.querySelector("#email_modal_recipients").value = "";
-            $modal.querySelector("#email_modal_subject").value = "";
-            $modal.querySelector("#email_modal_message").value = "";
+        $modal.innerHTML = Util.templateHelper(ModalMenu.templates[options.template], options.names);
+        if (options.item !== undefined) {
+            ModalEvents[options.template].setDefaultValues($modal, options.item);
         }
-        $modal.querySelector("textarea").addEventListener("input", function () {
-            this.style.height = "auto";
-            this.style.height = this.scrollHeight + "px";
-        })
+        ModalEvents[options.template].bindEvents($modal);
         $modal.querySelector("#save_button").addEventListener("click", function (e) {
-            if (options.buttons["save"]) {
-                let returnData = {
-                    recipients: $modal.querySelector("#email_modal_recipients").value,
-                    subject: $modal.querySelector("#email_modal_subject").value,
-                    message: $modal.querySelector("#email_modal_message").value
-                };
-                options.buttons["save"](returnData);
-            }
-            ModalMenu.close($modal, options.onCloseCallback);
+            let returnData = ModalEvents[options.template].gatherData($modal);
+            options.buttons.save(returnData);
+            ModalMenu.close($modal);
         });
         $modal.querySelector("#close_button").addEventListener("click", function (e) { 
             ModalMenu.close($modal, options.onCloseCallback);
@@ -336,7 +484,6 @@ let ModalMenu = {
         if (options.onOpenCallback !== undefined) {
             options.onOpenCallback($modal);
         }
-        ModalMenu.loadedModals.push(options.id);
     },
     close: function ($modal, onCloseCallback) {
         if (onCloseCallback !== undefined) {
@@ -350,15 +497,111 @@ let ModalMenu = {
     }
 };
 
+let ModalEvents = {
+    new_email_template: {
+        setDefaultValues: function ($modal, email) {
+            if (email === undefined) {
+                $modal.querySelector("#email_modal_recipients").value = "";
+                $modal.querySelector("#email_modal_subject").value = "";
+                $modal.querySelector("#email_modal_message").value = "";
+            } else {
+                $modal.querySelector("#email_modal_recipients").value = email.recipients_string;
+                $modal.querySelector("#email_modal_subject").value = email.subject;
+                $modal.querySelector("#email_modal_message").value = email.message;
+            }
+        },
+        gatherData: function ($modal) {
+            let data = {
+                recipients: $modal.querySelector("#email_modal_recipients").value,
+                subject: $modal.querySelector("#email_modal_subject").value,
+                message: $modal.querySelector("#email_modal_message").value
+            };
+            return data;
+        },
+        bindEvents: function ($modal) {
+            $modal.querySelector("textarea").addEventListener("input", function () {
+                this.style.height = "auto";
+                this.style.height = Math.min(this.scrollHeight + 5, "450") + "px";
+            });
+        }
+    },
+    generic_input_template: {
+        setDefaultValues: function ($modal, item) {
+            $modal.querySelector("#preset_value").value = item.name;
+        },
+        gatherData: function ($modal) {
+            let element = $modal.querySelector("label").nextElementSibling;
+            switch (element.tagName.toLowerCase()) {
+                case "input":
+                case "textarea":
+                    return element.value;
+                case "select":
+                    if (element.multiple) {
+                        return Array.from(element.selectedOptions).map(option => option.value);
+                    }
+                    return element.value;
+                case "option":
+                    return element.value;
+                default:
+                    return undefined;
+            }
+        },
+        bindEvents: function ($modal) {
+            
+        }
+    }
+};
+
+let Confirmation = {
+    template: document.getElementById("confirmation_template").innerHTML,
+    open: function (options) {
+        let html = Util.templateHelper(Confirmation.template, {
+            title: options.title,
+            description: options.description,
+            approve_message: options.approve_message
+        });
+        let confirmationModal = document.createElement("div");
+        confirmationModal.innerHTML = html;
+        confirmationModal.id = options.id;
+        document.body.append(confirmationModal);
+
+        let $confirmation = document.getElementById(options.id);
+        const postCallback = function (wasApproved) {
+            options.callback(wasApproved);
+            $confirmation.remove();
+        };
+        $confirmation.querySelector("#approve_button").addEventListener("click", e => postCallback(true));
+        $confirmation.querySelector("#cancel_button").addEventListener("click", e => postCallback(false));
+    }
+};
+
+let EmptyView = {
+    template: document.getElementById("empty_view_template").innerHTML,
+    create: function (options) {
+        let html = Util.templateHelper(EmptyView.template, options.names);
+        options.$container.innerHTML = html;
+        if (options.create) {
+            let $emptyViewCreate = options.$container.querySelector(".empty-view-new");
+            $emptyViewCreate.addEventListener("click", options.create);
+        }
+    }
+};
+
 let Dropdowns = {
     email_row_dropdown: {
         new_email: function (id) {
             ModalMenu.open({
                 id: "new_email",
+                template: "new_email_template",
+                context: "new",
+                item: undefined,
+                names: {
+                    save_button_name: "Create"
+                },
                 buttons: {
                     save: function (data) {
-                        let emailReps = Util.getContactIdsFromNames(data.recipients);
-                        let email = new Class.Email(false, data.subject, data.message, emailReps);
+                        let recipientArray = Util.getContactIdsFromNames(data.recipients);
+                        let email = new Class.Email(false, data.subject, data.message, recipientArray, -1);
                         Email.UI.resource.currentItems.push(email);
                         Email.UI.buildTable();
                     }
@@ -366,10 +609,15 @@ let Dropdowns = {
             });
         },
         edit_email: function (id) {
-            let email = Email.UI.resource.currentItems.find(email => email.id == id);
+            let email = Util.getEmail(id);
             ModalMenu.open({
                 id: "edit_email",
-                email: email,
+                template: "new_email_template",
+                context: "edit",
+                item: email,
+                names: {
+                    save_button_name: "Save"
+                },
                 buttons: {
                     save: function (data) {
                         let recipientArray = Util.getContactIdsFromNames(data.recipients);
@@ -381,19 +629,107 @@ let Dropdowns = {
                 }
             });
         },
+        create_folder: function (id) {
+            ModalMenu.open({
+                id: "create_folder_menu",
+                template: "generic_input_template",
+                names: {
+                    input_label: "Folder Name",
+                    generic_input: "<input></input>",
+                    save_button_name: "Create"
+                },
+                buttons: {
+                    save: function (folder_name) {
+                        let folder = new Class.Folder(folder_name, Email.UI.resource.currentFolder);
+                        Email.UI.resource.folders.push(folder);
+                        Email.UI.buildTable();
+                    }
+                }
+            })
+        },
+        move_to_folder: function (id) {
+            let email = Util.getEmail(id);
+            Util.selectFolder(email.folder_id).then(folderSelection => {
+                if (folderSelection !== undefined) {
+                    email.folder_id = folderSelection;
+                    Email.UI.deleteRow(id);
+                }
+            });
+        },
         mark_read: function (id) {
-            let email = Email.UI.resource.currentItems.find(email => email.id == id);
+            let email = Util.getEmail(id);
             email.is_read = true;
             Email.UI.rebuildRow(email);
         },
         mark_unread: function (id) {
-            let email = Email.UI.resource.currentItems.find(email => email.id == id);
+            let email = Util.getEmail(id);
             email.is_read = false;
             Email.UI.rebuildRow(email);
         },
         delete_email: function (id) {
-            Email.UI.resource.currentItems = Email.UI.resource.currentItems.filter(email => email.id != id);
-            Email.UI.deleteRow(id);
+            Confirmation.open({
+                id: "confirmation_delete_email",
+                title: "Delete email",
+                description: "Are you sure you want to delete this email?",
+                approve_message: "Delete",
+                callback: function (wasApproved) {
+                    if (wasApproved) {
+                        Email.UI.resource.currentItems = Email.UI.resource.currentItems.filter(email => email.id != id);
+                        Email.UI.deleteRow(id);
+                        Class.Email.delete(id);
+                    }
+                }
+            });
+        }
+    },
+    folder_row_dropdown: {
+        create_folder: function (id) {
+            Dropdowns.email_row_dropdown.create_folder();
+        },
+        edit_folder_name: function (id) {
+            let folder = Util.getFolder(id);
+            ModalMenu.open({
+                id: "edit_folder_name",
+                template: "generic_input_template",
+                item: folder,
+                names: {
+                    input_label: "Folder Name",
+                    generic_input: `<input id="preset_value"></input>`,
+                    save_button_name: "Save"
+                },
+                buttons: {
+                    save: function (folder_name) {
+                        folder.name = folder_name;
+                    }
+                }
+            });
+        },
+        move_to_folder: function (id) {
+            let folder = Util.getFolder(id);
+            Util.selectFolder(folder.id).then(folderSelection => {
+                if (folderSelection !== undefined) {
+                    folder.parent = folderSelection;
+                    Email.UI.deleteRow(id);
+                }
+            });
+        },
+        open_folder: function (id) {
+            Util.setFolder(id);
+        },
+        delete_folder: function (id) {
+            Confirmation.open({
+                id: "confirmation_delete_folder",
+                title: "Delete folder",
+                description: "Are you sure you want to delete this folder?",
+                approve_message: "Delete",
+                callback: function (wasApproved) {
+                    if (wasApproved) {
+                        Email.UI.resource.folders = Email.UI.resource.folders.filter(folder => folder.id != id);
+                        Email.UI.deleteRow(id);
+                        Class.Folder.delete(id);
+                    }
+                }
+            });
         }
     }
 };

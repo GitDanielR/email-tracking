@@ -1,5 +1,5 @@
 <script type="text/template" id="row_template">
-    <div class="table-row" id="%id%" data-activates="email_row_dropdown">
+    <div class="table-row" id="%id%" data-activates="%activates%" data-is-folder="%is_folder%">
         <div class="column read">%is_read%</div>
         <div class="column recipients">%recipients%</div>
         <div class="column subject">%subject%</div>
@@ -10,7 +10,7 @@
     <div style="position:absolute;right:5%;top:1%" onclick="Events.closeEmailPreview()" id="close_preview_button" class="red-text">X</div>
     <div><b>Recipients:</b> %recipients%</div>
     <div><b>Subject:</b> %subject%</div>
-    <div><b>Message:</b> %message%</div>
+    <div>%message%</div>
 </script>
 <script type="text/template" id="new_email_template">
     <div class="field-row">
@@ -26,9 +26,39 @@
         <textarea id="email_modal_message"></textarea>
     </div>
     <div class="modal-buttons">
-        <div id="save_button"></div>
-        <div id="close_button" class="red-text">Close</div>
+        <div id="save_button">%save_button_name%</div>
+        <div id="close_button">Close</div>
     </div>
+</script>
+<script type="text/template" id="confirmation_template">
+    <div class="confirmation-menu">
+        <div class="field-row">%title%</div>
+        <div class="field-row">%description%</div>
+        <div class="modal-buttons">
+            <div id="approve_button" class="red-text">%approve_message%</div>
+            <div id="cancel_button">Cancel</div>
+        </div>
+    </div>
+</script>
+<script type="text/template" id="generic_input_template">
+    <div class="field-row">
+        <label for="generic_input">%input_label%</label>
+        %generic_input%
+    </div>
+    <div class="modal-buttons">
+        <div id="save_button">%save_button_name%</div>
+        <div id="close_button">Close</div>
+    </div>
+</script>
+<script type="text/template" id="empty_view_template">
+    <div class="empty-view">
+        <div class="title">%title%</div>
+        <div class="message">%message%</div>
+        <div class="empty-view-new">%create_new_description%</div>
+    </div>
+</script>
+<script type="text/template" id="breadcrumb_template">
+    <div class="breadcrumbs" data-id="%id%"><b>%name%</b></div>
 </script>
 
 <head>
@@ -36,6 +66,9 @@
     <link rel="stylesheet" type="text/css" href="styles.css"></script>
 </head>
 <body>
+    <div id="breadcrumbs">
+        <div class="breadcrumbs" data-id="-1"><b>Home</b></div>
+    </div>
     <div id="email_container">
         <div id="email_table">
             <div id="email_header">
@@ -53,9 +86,18 @@
 </body>
 
 <ul id="email_row_dropdown">
-    <li data-action="new_email">New</li>
-    <li data-action="edit_email">Edit</li>
+    <li data-action="new_email">New Email</li>
+    <li data-action="edit_email">Edit Email</li>
+    <li data-action="create_folder">Create Folder</li>
+    <li data-action="move_to_folder">Move to Folder</li>
     <li data-action="mark_read" id="mark_read_option">Mark Read</li>
     <li data-action="mark_unread" id="mark_unread_option">Mark Unread</li>
-    <li class="red-text" data-action="delete_email">Delete</li>
+    <li data-action="delete_email" class="red-text">Delete</li>
+</ul>
+<ul id="folder_row_dropdown">
+    <li data-action="create_folder">Create Folder</li>
+    <li data-action="edit_folder_name">Edit Folder</li>
+    <li data-action="move_to_folder">Move to Folder</li>
+    <li data-action="open_folder">Open Folder</li>
+    <li data-action="delete_folder" class="red-text">Delete Folder</li>
 </ul>

@@ -8,7 +8,7 @@
 * {
     box-sizing: border-box;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 12px;
+    font-size: 14px;
     margin: 0;
     padding: 0;
 }
@@ -26,10 +26,10 @@ ul {
 }
 ul li {
     list-style-type: none;
-    border: 1px solid var(--light_gray);
-    background-color: var(--white);
+    border: 1px solid var(--dark_gray);
+    background-color: var(--light_gray);
     font-size: 16px;
-    padding: 1px 5px;
+    padding: 3px 15px;
 }
 ul:hover {
     cursor: pointer;
@@ -39,18 +39,30 @@ ul:hover {
     position: fixed;
     top: 12.5%; left: 25%;
     width: 50%;
-    height: 75%;
+    max-height: 75%;
+    flex-grow: 1;
+    padding: 1% 2% 4% 2%;
+}
+.confirmation-menu {
+    position: fixed;
+    top: 12.5%; left: 25%;
+    width: 50%;
+    height: 25%;
+    max-height: 800px;
     padding: 1% 2%;
+    background-color: var(--white);
+    border: 2px solid var(--light_gray);
 }
 .modal-menu.open {
     display: block;
     background-color: var(--white);
-    border: 1px solid var(--light_gray);
+    border: 2px solid var(--light_gray);
 }
 .modal-menu.closed {
     display: none;
 }
-.modal-menu .modal-buttons {
+.modal-menu .modal-buttons,
+.confirmation-menu .modal-buttons {
     position: absolute;
     right: 0; bottom: 1%;
     margin-right: 3%;
@@ -58,12 +70,14 @@ ul:hover {
     flex-direction: row;
     min-width: 10%;
     max-width: 25%;
+    height: auto;
     gap: 10px;
     cursor: pointer;
 }
-.modal-menu .modal-buttons > * {
+.modal-menu .modal-buttons > *,
+.confirmation-menu .modal-buttons > * {
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
     padding: 5px 7px;
     border: 1px solid var(--light_gray);
     border-radius: 22%;
@@ -71,11 +85,13 @@ ul:hover {
 .modal-menu .modal-buttons #save_button {
     color: var(--light_blue);
 }
-.modal-menu .field-row {
+.modal-menu .field-row,
+.confirmation-menu .field-row {
     width: 100%;
-    margin-bottom: 1rem;
+    margin-bottom: 5px;
 }
-.modal-menu .field-row > * {
+.modal-menu .field-row > *,
+.confirmation-menu .field-row {
     width: 100%;
     padding: 1%;
     text-overflow: ellipsis;
@@ -83,9 +99,9 @@ ul:hover {
 }
 .modal-menu .field-row label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 2px;
     text-transform: uppercase;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--dark_gray);
 }
 .modal-menu.field-row input {
@@ -94,21 +110,62 @@ ul:hover {
 .modal-menu .field-row textarea {
     height: auto;
     min-height: 200px;
-    max-height: 60%;
     resize: none;
 }
+.empty-view {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    text-align: center;
+    padding: 25px;
+}
+.empty-view > * {
+    margin-bottom: 10px;
+}
+.empty-view .title {
+    font-size: 24px;
+    font-weight: 600;
+}
+.empty-view .message {
+    font-size: 18px;
+}
+.empty-view .empty-view-new {
+    font-size: 16px;
+    color: var(--light_blue);
+    text-decoration: underline;
+    cursor: pointer;
+}
 
+#breadcrumbs {
+    padding-top: 1%;
+    padding-left: 5px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+#breadcrumbs,
 #email_container {
+    margin: auto;
+    width: 80%;
+}
+#email_container {
+    padding: 15px 0;
     display: flex;
     flex-direction: row;
     flex-grow: 1;
-    width: 80%;
-    height: 100%;
-    margin: auto;
-    border: 1px solid var(--light_gray);
+    max-height: 95%;
 }
 #email_header {
     font-weight: bold;
+}
+#email_header .column:hover {
+    cursor: pointer;
+}
+#email_header .column span {
+    font-size: 10px;
 }
 #email_table {
     border: 1px solid var(--light_gray);
@@ -171,7 +228,7 @@ ul:hover {
     width: 67%;
 }
 
-#email_row_dropdown[data-read="true"] #mark_read_option,
-#email_row_dropdown[data-read="false"] #mark_unread_option {
+#email_row_dropdown[data-is_read="true"] #mark_read_option,
+#email_row_dropdown[data-is_read="false"] #mark_unread_option {
     display: none;
 }
