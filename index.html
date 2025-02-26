@@ -1,5 +1,5 @@
 <script type="text/template" id="row_template">
-    <div class="table-row" id="%id%" data-activates="%activates%" data-is-folder="%is_folder%">
+    <div class="table-row dropdown-row" data-id="%id%" data-activates="%activates%" data-is-folder="%is_folder%" draggable="true" data-multi-selectable="%multi_selectable%">
         <div class="column read">%is_read%</div>
         <div class="column recipients">%recipients%</div>
         <div class="column subject">%subject%</div>
@@ -15,11 +15,11 @@
 <script type="text/template" id="new_email_template">
     <div class="field-row">
         <label for="email_modal_recipients">Recipients</label>
-        <input id="email_modal_recipients"></input>
+        <input id="email_modal_recipients" type="text" autocomplete="off"></input>
     </div>
     <div class="field-row">
         <label for="email_modal_subject">Subject</label>
-        <input id="email_modal_subject"></input>
+        <input id="email_modal_subject" type="text" autocomplete="off"></input>
     </div>
     <div class="field-row">
         <label for="email_modal_message">Message</label>
@@ -66,8 +66,13 @@
     <link rel="stylesheet" type="text/css" href="styles.css"></script>
 </head>
 <body>
-    <div id="breadcrumbs">
-        <div class="breadcrumbs" data-id="-1"><b>Home</b></div>
+    <div id="email_nav">
+        <div id="breadcrumbs">
+            <div class="breadcrumbs" data-id="-1"><b>Home</b></div>
+        </div>
+        <div id="search_bar">
+            <input placeholder="Search..." type="text" autocomplete="off"/>
+        </div>
     </div>
     <div id="email_container">
         <div id="email_table">
