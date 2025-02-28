@@ -22,23 +22,36 @@ HTMLElement.prototype.bindFolderRowEvents = function () {
     $folderRow.addEventListener("drop", Events.handleDrop);
 };
 HTMLElement.prototype.multiSelect = function(options) {
+    const self = this;
     const getAll = function () {
-        return Array.from(this.querySelectorAll("[data-multi-selected='true']")).map($row => {
+        return Array.from(self.querySelectorAll("[data-multi-selected='true']")).map($row => {
             return $row.dataset.id;
         });
-    }.bind(this);
+    };
     const clearAll = function () {
-        this.querySelectorAll("[data-multi-selected='true']").forEach($row => {
+        self.querySelectorAll("[data-multi-selected='true']").forEach($row => {
             $row.removeAttribute("data-multi-selected");
             $row.removeAttribute("data-multi-last");
         });
-    }.bind(this);
+    };
+    const checkClear = function (e) {
+        if (e.target.closest(options.selector + "[data-multi-selectable='true']") === null) {
+            clearAll();
+        }
+    };
     if (options === "get") {
         return getAll();
     }
     if (options === "clear") {
         clearAll();
         return;
+    }
+    if (options === "delete") {
+        clearAll();
+        self.querySelectorAll(options.selector + "[data-multi-selectable='true']").forEach($row => {
+            $row.removeEventListener("click", handleClick);
+        });
+        document.removeEventListener("click", checkClear);
     }
     
     let currOptions = Object.assign({}, options);
@@ -54,7 +67,7 @@ HTMLElement.prototype.multiSelect = function(options) {
     };
 
     const handleClick = function (e) {
-        const $lastSelected = this.querySelector(options.selector + "[data-multi-last='true']");
+        const $lastSelected = self.querySelector(options.selector + "[data-multi-last='true']");
         const $targetRow = e.target.closest(options.selector);
         if ($lastSelected === null) {
             markSelected($targetRow, null);
@@ -62,7 +75,7 @@ HTMLElement.prototype.multiSelect = function(options) {
         }
         if (e.shiftKey) {
             let numPasses = 0;
-            let $rows = this.querySelectorAll(options.selector + "[data-multi-selectable='true']");
+            let $rows = self.querySelectorAll(options.selector + "[data-multi-selectable='true']");
             for (const $row of $rows) {
                 if (numPasses === 1) {
                     $row.setAttribute("data-multi-selected", true);
@@ -74,29 +87,24 @@ HTMLElement.prototype.multiSelect = function(options) {
                     break;
                 }
             }
-            markSelected($targetRow, $lastSelected);
-        } else if (e.ctrlKey) {
-            markSelected($targetRow, $lastSelected);
-        } else {
+        } else if (!e.ctrlKey) {
             clearAll();
-            markSelected($targetRow, $lastSelected);
         }
-    }.bind(this);
+        markSelected($targetRow, $lastSelected);
+    };
 
-    this.querySelectorAll(options.selector + "[data-multi-selectable='true']").forEach($row => {
+    self.querySelectorAll(options.selector + "[data-multi-selectable='true']").forEach($row => {
         $row.addEventListener("click", handleClick);
     });
-    document.addEventListener("click", e => {
-        if (e.target.closest(options.selector + "[data-multi-selectable='true']") === null) {
-            clearAll();
-        }
-    });
+    document.addEventListener("click", checkClear);
 };
 
 class idHandler {
-    static ids = new Array(10).fill(undefined);
+    static setupIds () {
+        this.ids = new Array(10).fill(undefined);
+    }
 
-    static getNextId() {
+    static getNextId () {
         let index = 0;
         while (index < this.ids.length) {
             if (this.ids[index] === undefined) {
@@ -118,8 +126,8 @@ let Class = {};
 Class.Contact = class extends idHandler {
     constructor (first_name, last_name) {
         super();
-        this.id = Class.Contact.getNextId();
-        Class.Contact.ids[this.id] = true;
+        this.id = this.constructor.getNextId();
+        this.constructor.ids[this.id] = true;
         this.first_name = first_name;
         this.last_name = last_name;
     }
@@ -128,16 +136,24 @@ Class.Contact = class extends idHandler {
         return this.first_name + " " + this.last_name;
     }
 }
+Class.Contact.setupIds();
 Class.Email = class extends idHandler {
-    constructor (is_read, subject, message, recipients, folder_id) {
+    constructor (is_read, subject, message, recipients, parent, sender) {
         super();
-        this.id = Class.Email.getNextId();
-        Class.Email.ids[this.id] = true;
+        this.id = this.constructor.getNextId();
+        this.constructor.ids[this.id] = true;
         this.is_read = is_read;
         this.subject = subject;
         this.message = message;
-        this.parent = folder_id ?? -1;
+        this.sender = sender;
+        this.parent = parent ?? -1;
         this.updateRecipients(recipients);
+        this.updateSender(sender);
+    }
+
+    updateSender (sender) {
+        this.sender = sender;
+        this.sender_string = Util.getContactString([sender]);
     }
 
     updateRecipients (recipients) {
@@ -145,7 +161,7 @@ Class.Email = class extends idHandler {
         this.recipients_string = Util.getContactString(this.recipients);
     }
 
-    [Symbol.iterator]() {
+    [Symbol.iterator] () {
         let index = 0;
         const entries = Object.entries(this).filter(([key, value]) => typeof value === "string");
 
@@ -160,16 +176,17 @@ Class.Email = class extends idHandler {
         };
     }
 }
+Class.Email.setupIds();
 Class.Folder = class extends idHandler {
-    constructor(name, parent) {
+    constructor (name, parent) {
         super();
-        this.id = Class.Folder.getNextId();
-        Class.Folder.ids[this.id] = true;
+        this.id = this.constructor.getNextId();
+        this.constructor.ids[this.id] = true;
         this.name = name;
         this.parent = parent ?? -1;
     }
 
-    [Symbol.iterator]() {
+    [Symbol.iterator] () {
         let index = 0;
         const entries = Object.entries(this).filter(([key, value]) => typeof value === "string");
 
@@ -184,20 +201,47 @@ Class.Folder = class extends idHandler {
         };
     }
 }
-Class.Resource = class {
-    constructor() {
+Class.Folder.setupIds();
+
+Class.Resource = class extends EventTarget {
+    constructor(initializeCallback) {
+        super();
         this.currentItems = [];
         this.currentParents = [];
-        this.searchText = "";
+        this._searchText = "";
         this.sortDir = "";
         this.itemSortType = "";
         this.parentSortType = "";
         this.parent = -1;
         this.filteredItems = [];
         this.filteredParents = [];
+        this.tab = "";
+        this.filterLength = 0;
+        this._page = 1;
+        this.paginationSize = 15;
 
-        this.setSearch = this.setSearch.bind(this);
-        Object.assign(this, EventTarget.prototype);
+        if (initializeCallback !== undefined) {
+            initializeCallback(this);
+        }
+    }
+
+    get page () {
+        return this._page;
+    }
+
+    set page (value) {
+        let success = false;
+        if (!(isNaN(value) || value < 1 || value > Math.ceil(this.filterLength / this.paginationSize)) && this._page !== value) {
+            success = true;
+            this._page = value;
+        }
+        const pageChangeEvent = new CustomEvent("pageupdate", {
+            detail: {
+                page: this._page,
+                success: success
+            }
+        });
+        this.dispatchEvent(pageChangeEvent);
     }
 
     getSingle (id, isParent) {
@@ -207,113 +251,145 @@ Class.Resource = class {
         return this.currentItems.find(p => p.id == id);
     }
 
-    getAll (callback, filter = false, filterByParent = false, sort = false, search = false, itemSearchColumn = "", parentSearchColumn = "") {
-        if (filter) {
-            this.filter(filterByParent, search, itemSearchColumn, parentSearchColumn);
+    getAll (callback, paginate = false, filter = false, filterByParent = false, filterByTab = false, filterBySearch = false, itemSearchColumn = "", parentSearchColumn = "", sort = false, onlyPaginate = false, onlySearch = false) {
+        if ((filter && !onlyPaginate) || onlySearch) {
+            this.filter(filterByParent, filterByTab, filterBySearch, itemSearchColumn, parentSearchColumn, onlySearch);
         }
-        if (sort) {
+        if (sort && !onlyPaginate && !onlySearch) {
             this.sort(filter);
         }
-        callback(filter ? {
+
+        let returnData = filter ? {
             items: this.filteredItems,
             parents: this.filteredParents
         } : {
             items: this.currentItems,
             parents: this.currentParents
-        });
+        };
+        this.filterLength = returnData.items.length;
+        callback(paginate ? this.paginate(returnData) : returnData);
     }
 
-    filter (filterByParent = true, filterBySearch = true, itemSearchColumn = "", parentSearchColumn = "") {
+    paginate ({ items, parents}) {
+        const start = (this._page -  1) * this.paginationSize;
+        const end = Math.min(items.length, this._page * this.paginationSize);
+        return {
+            items: items.slice(start, end),
+            parents: parents
+        };
+    }
+
+    filter (filterByParent = true, filterByTab = true, filterBySearch = true, itemSearchColumn = "all", parentSearchColumn = "all", onlySearch = false) {
+        const self = this;
         const matchesParent = function (item) {
-            if (!filterByParent) {
+            if (!filterByParent || onlySearch) {
                 return true;
             }
-            return item.parent == this.parent;
-        }.bind(this);
+            return item.parent == self.parent;
+        };
+        const matchesTab = function (item) {
+            if (!filterByTab || onlySearch) {
+                return true;
+            }
+            return self.tabFilter(item);
+        };
         const matchesSearch = function (item, isParent) {
-            if (!filterBySearch || this.searchText === "") {
+            if (!filterBySearch || self.searchText === "") {
                 return true;
             }
             if (!isParent) {
                 if (itemSearchColumn !== "all") {
-                    return item[itemSearchColumn] && item[itemSearchColumn].toLowerCase().includes(this.searchText);
+                    return item[itemSearchColumn] && item[itemSearchColumn].toLowerCase().includes(self.searchText);
                 } else {
                     for (const [key, value] of item) {
-                        if (value.toString().toLowerCase().includes(this.searchText)) {
+                        if (value.toString().toLowerCase().includes(self.searchText)) {
                             return true;
                         }
                     }
                 }
             } else {
                 if (parentSearchColumn !== "all") {
-                    return item[parentSearchColumn] && item[parentSearchColumn].toLowerCase().includes(this.searchText);
+                    return item[parentSearchColumn] && item[parentSearchColumn].toLowerCase().includes(self.searchText);
                 } else {
                     for (const [key, value] of item) {
-                        if (value.toString().toLowerCase().includes(this.searchText)) {
+                        if (value.toString().toLowerCase().includes(self.searchText)) {
                             return true;
                         }
                     }
                 }
             }
             return false;
-        }.bind(this);
+        };
         this.filteredItems = this.currentItems.filter(item => {
-            return matchesParent(item) && matchesSearch(item, false);
+            return matchesParent(item) && matchesTab(item) && matchesSearch(item, false);
         });
         this.filteredParents = this.currentParents.filter(item => {
-            return matchesParent(item) && matchesSearch(item, true);
+            return matchesParent(item) && matchesTab(item) && matchesSearch(item, true);
         });
     }
 
     sort (sortFiltered) {
+        const self = this;
         const getSortFunction = function (itemComparingType, isParent) {
             let itemComparingFunction = undefined;
             if (itemComparingType === "string") {
                 itemComparingFunction = function (itemA, itemB) {
-                    return itemA[isParent ? this.parentSortType : this.itemSortType].localeCompare(itemB[isParent ? this.parentSortType : this.itemSortType]);
-                }.bind(this);
+                    return itemA[isParent ? self.parentSortType : self.itemSortType].localeCompare(itemB[isParent ? self.parentSortType : self.itemSortType]);
+                };
             } else if (itemComparingType === "number") {
                 itemComparingFunction = function (itemA, itemB) {
-                    return itemA[isParent ? this.parentSortType : this.itemSortType] - itemB[isParent ? this.parentSortType : this.itemSortType];
-                }.bind(this);
+                    return itemA[isParent ? self.parentSortType : self.itemSortType] - itemB[isParent ? self.parentSortType : self.itemSortType];
+                };
+            } else if (itemComparingType === "boolean") {
+                itemComparingFunction = function (itemA, itemB) {
+                    const valueA = itemA[isParent ? self.parentSortType : self.itemSortType];
+                    const valueB = itemB[isParent ? self.parentSortType : self.itemSortType];
+                    return valueA === valueB ? 0 : valueA ? 1 : -1;
+                };
             }
             return itemComparingFunction;
-        }.bind(this);
+        };
         const sortItems = function (isParent) {
-            let items = isParent ? (sortFiltered ? this.filteredParents : this.currentParents) : (sortFiltered ? this.filteredItems : this.currentItems);
-            let sortType = isParent ? this.parentSortType : this.itemSortType;
+            let items = isParent ? (sortFiltered ? self.filteredParents : self.currentParents) : (sortFiltered ? self.filteredItems : self.currentItems);
+            let sortType = isParent ? self.parentSortType : self.itemSortType;
             if (items.length > 0) {
                 let itemComparingFunction = getSortFunction(typeof items[0][sortType], isParent);
                 if (itemComparingFunction !== undefined) {
                     items.sort(itemComparingFunction);
-                    if (this.sortDir === "desc") {
+                    if (self.sortDir === "desc") {
                         items.reverse();
                     }
                 }
             }
-        }.bind(this);
+        };
         sortItems(false); // sort items
         sortItems(true);  // sort parents
     }
 
-    setSearch (e) {
-        this.searchText = e.target.value.toLowerCase();
+    get searchText () {
+        return this._searchText;
+    }
+
+    set searchText (value) {
+        this._searchText = value.toLowerCase().trim();
     }
 
     isSearching () {
-        return this.searchText.trim() !== "";
+        return this.searchText !== "";
     }
 }
 
 let Master = {};
 Master.Storage = {
-    contacts: []
+    contacts: [
+        new Class.Contact("Me", "Me")
+    ]
 };
 
 let Email = {};
 Email.load = function  () {
     Util.generateContacts(10);
-    Util.generateEmails(15);
+    Util.generateEmails(50);
     Util.generateFolders(3);
     Email.UI.init();
 };
@@ -322,16 +398,27 @@ Email.UI = {
     Elements: {
         email_body: undefined,
         email_table: undefined,
-        email_preview: undefined
+        email_preview: undefined,
+        pagination: undefined
     },
-    Resource: new Class.Resource(),
+    Resource: new Class.Resource(self => {
+        self.sortDir = "asc";
+        self.itemSortType = "is_read";
+        self.parentSortType = "name";
+        self.tab = "inbox";
+        self.tabFilter = function (item) {
+            if (item instanceof Class.Folder) {
+                return self.tab === "inbox";
+            }
+            return self.tab === "inbox" ? item.recipients.includes(0) : item.sender === 0; 
+        };
+    }),
     templates: {
         breadcrumbs: document.getElementById("breadcrumb_template").innerHTML,
         emailPreviewTemplate: document.getElementById("email_preview_template").innerHTML,
         rowTemplate: document.getElementById("row_template").innerHTML
     },
     init: function () {
-        this.Resource.parentSortType = "name";
         this.getContainers();
         this.buildTable();
         this.bindSingleEvents();
@@ -339,9 +426,10 @@ Email.UI = {
     getContainers: function() {
         Email.UI.Elements.email_body = document.getElementById("email_body");
         Email.UI.Elements.email_table = document.getElementById("email_table");
-        Email.UI.Elements.email_preview = document.getElementById("email_preview")
+        Email.UI.Elements.email_preview = document.getElementById("email_preview");
+        Email.UI.Elements.pagination = document.getElementById("pagination_container");
     },
-    buildTable: function () {
+    buildTable: function (isPageChange = false, isSearch = false) {
         Email.UI.Resource.getAll(data => {
             let html = "";
             html += data.parents.reduce((aggregate, folder) => {
@@ -351,6 +439,7 @@ Email.UI = {
                     is_folder: 1,
                     is_read: "&#128193;",
                     subject: "",
+                    sender: "",
                     message: folder.name,
                     recipients: "",
                     multi_selectable: "false"
@@ -368,6 +457,7 @@ Email.UI = {
                         is_read: email.is_read ? "" : "&#x2022;",
                         subject: email.subject,
                         message: email.message,
+                        sender: Util.getContactString([email.sender]),
                         recipients: email.recipients_string,
                         multi_selectable: "true"
                     });
@@ -377,7 +467,7 @@ Email.UI = {
                 Email.UI.Elements.email_body.innerHTML = html;
                 Email.UI.bindEvents();
             }
-        }, true, true, true, true, "all", "name");
+        }, true, true, true, true, true, "all", "name", true, isPageChange, isSearch);
     },
     buildEmpty: function (html) {
         let message = Email.UI.Resource.isSearching() ? `No emails ${html.trim() === "" ? " or folders " : ""} match search '${Email.UI.Resource.searchText}'.` : Email.UI.Resource.parent !== -1 ? `No emails ${html.trim() === "" ? " or folders " : ""} in folder ${Util.getFolder(Email.UI.Resource.parent).name}.` : "You have no emails or folders.";
@@ -421,38 +511,56 @@ Email.UI = {
             $breadcrumb.addEventListener("click", Events.switchFolder);
         });
     },
-    bindEvents: function (emailId) {
-        if (emailId === undefined) {
-            Email.UI.Elements.email_table.querySelector("#email_header").querySelectorAll(".column").forEach($emailColumn => {
-                $emailColumn.removeEventListener("click", Events.applySort);
-                $emailColumn.addEventListener("click", Events.applySort);
-            });
-            Email.UI.Elements.email_body.multiSelect({
-                selector: ".table-row",
-                $container: Email.UI.Elements.email_body
-            });
-            Email.UI.Elements.email_body.querySelectorAll(".table-row").forEach($tableRow => {
-                if ($tableRow.dataset.isFolder === "1") {
-                    $tableRow.bindFolderRowEvents();
-                } else {
-                    $tableRow.bindEmailRowEvents();
-                }
-            });
-        } else {
-            let $emailRow = Email.UI.Elements.email_body.querySelector(Util.getIdSelector(emailId));
-            $emailRow.bindEmailRowEvents();
-        }
+    bindEvents: function () {
+        Email.UI.Elements.email_body.multiSelect({
+            selector: ".table-row",
+            $container: Email.UI.Elements.email_body
+        });
+        Email.UI.Elements.email_body.querySelectorAll(".table-row").forEach($tableRow => {
+            if ($tableRow.dataset.isFolder === "1") {
+                $tableRow.bindFolderRowEvents();
+            } else {
+                $tableRow.bindEmailRowEvents();
+            }
+        });
     },
     bindSingleEvents: function () {
+        Email.UI.Elements.email_table.querySelector("#email_header").querySelectorAll(".column").forEach($emailColumn => {
+            $emailColumn.addEventListener("click", Events.applySort);
+        });
         document.getElementById("search_bar").addEventListener("input", e => {
-            Email.UI.Resource.setSearch(e);
-            Email.UI.buildTable();
+            Email.UI.Resource.searchText = e.target.value;
+            if (e.data === null || Email.UI.Resource.isSearching()) {
+                Email.UI.buildTable(false, true);
+            }
+        });
+        document.getElementById("tabs").childNodes.forEach($tab => {
+            $tab.addEventListener("click", Events.switchTab);
+        });
+        Email.UI.Elements.pagination.querySelector("#pagination_turn_left").addEventListener("click", e => {
+            Email.UI.Resource.page--;
+        });
+        Email.UI.Elements.pagination.querySelector("#pagination_page input").addEventListener("input", e => {
+            if (e.data === null && e.target.value === "") {
+                return;
+            }
+            Email.UI.Resource.page = parseInt(e.target.value);
+        });
+        Email.UI.Elements.pagination.querySelector("#pagination_turn_right").addEventListener("click", e => {
+            Email.UI.Resource.page++;
+        });
+        Email.UI.Resource.addEventListener("pageupdate", e => {
+            Email.UI.Elements.pagination.querySelector("#pagination_page input").value = e.detail.page;
+            if (e.detail.success) {
+                Email.UI.buildTable(true, false);
+            }
         });
     },
     showEmailPreview: function (emailId) {
         let email = Util.getEmail(emailId);
         email.is_read = true;
         let emailHtml = Util.templateHelper(Email.UI.templates.emailPreviewTemplate, {
+            sender: email.sender_string,
             recipients: email.recipients_string,
             subject: email.subject,
             message: email.message
@@ -530,10 +638,10 @@ let Events = {
         Email.UI.Elements.email_preview.style.display = "none";
     },
     applySort: function (e) {
-        const $header = e.target.parentElement;
+        const $header = e.target.closest(".header");
         $header.querySelectorAll(".column span").forEach($arrow => {
-            $arrow.style.display = "none";
-            $arrow.style.transform = "none";
+            $arrow.classList.add("hidden");
+            $arrow.style.transform = "";
         });
         const sortType = e.target.dataset.sort;
         if (sortType === Email.UI.Resource.itemSortType) {
@@ -548,7 +656,7 @@ let Events = {
             Email.UI.Resource.sortDir = "asc";
         }
         let $arrow = $header.querySelector(`.column[data-sort="${Email.UI.Resource.itemSortType}"] span`);
-        $arrow.style.display = "inline-block";
+        $arrow.classList.remove("hidden");
         if (Email.UI.Resource.sortDir === "desc") {
             $arrow.style.transform = "rotate(180deg)";
         }
@@ -557,6 +665,21 @@ let Events = {
     switchFolder: function (e) {
         let folderId = e.target.parentElement.dataset.id;
         Util.setFolder(folderId);
+    },
+    switchTab: function (e) {
+        const $target = e.target;
+        const tab = $target.id.split("_")[0];
+        if (tab !== Email.UI.Resource.tab) {
+            Array.from(e.target.parentElement.children).forEach($tab => {
+                $tab.classList.remove("active");
+            });
+            $target.classList.add("active");
+            $target.closest(".widget").setAttribute("current-tab", tab);
+
+            Email.UI.Resource.page = 1;
+            Email.UI.Resource.tab = tab;
+            Email.UI.buildTable();
+        }
     },
     handleDragStart: function (e) {
         e.dataTransfer.setData("text/plain", e.target.dataset.id);
@@ -746,7 +869,7 @@ let Util = {
         }
         
         for (let i = 0; i < numberEmails; i++) {
-            let email = new Class.Email(Math.random() < 0.5, getRandomNumberWords(5, 15), getRandomNumberWords(60, 120), Array.from({ length: getRandomNumber(1, Master.Storage.contacts.length)}, () => getRandomContactId()), -1);
+            let email = new Class.Email(Math.random() < 0.5, getRandomNumberWords(5, 15), getRandomNumberWords(60, 120), [0, ...Array.from({ length: getRandomNumber(1, Master.Storage.contacts.length)}, () => getRandomContactId())], -1, getRandomNumber(0, 1) === 0 ? 0 : getRandomContactId());
             Email.UI.Resource.currentItems.push(email);
         }
     },
@@ -1000,8 +1123,8 @@ let Dropdowns = {
         delete_email: function (ids) {
             Confirmation.open({
                 id: "confirmation_delete_email",
-                title: "Delete email",
-                description: "Are you sure you want to delete this email?",
+                title: "Delete email(s)",
+                description: "Are you sure you want to delete " + ids.length > 1 ? "these emails" : "this email" + "?",
                 approve_message: "Delete",
                 callback: function (wasApproved) {
                     if (wasApproved) {

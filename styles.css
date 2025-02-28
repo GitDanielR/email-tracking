@@ -7,6 +7,7 @@
     --dark_gray: #5d6169;
     --off_white: #ffffe6;
     --light_yellow: #ffffe0;
+    --dark_green: #228a39;
 }
 * {
     box-sizing: border-box;
@@ -19,7 +20,15 @@
     color: var(--red);
 }
 .hidden {
-    display: none;
+    display: none !important;
+}
+.button {
+    padding: 5px 7px;
+    border: 1px solid var(--light_gray);
+    border-radius: 22%;
+}
+.button:hover {
+    cursor: pointer;
 }
 
 ul {
@@ -75,15 +84,12 @@ ul:hover {
     max-width: 25%;
     height: auto;
     gap: 10px;
-    cursor: pointer;
 }
 .modal-menu .modal-buttons > *,
 .confirmation-menu .modal-buttons > * {
     font-size: 15px;
     font-weight: 600;
-    padding: 5px 7px;
     border: 1px solid var(--light_gray);
-    border-radius: 22%;
 }
 .modal-menu .modal-buttons #save_button {
     color: var(--dark_blue);
@@ -173,6 +179,21 @@ ul:hover {
     box-shadow: 0 0 5px var(--light_gray);
 }
 
+#search_and_tabs {
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+}
+#search_and_tabs #tabs {
+    display: flex;
+    margin: auto;
+    gap: 20px;
+}
+#search_and_tabs #tabs .active {
+    background-color: var(--dark_gray);
+    color: var(--white);
+}
+
 #email_nav,
 #email_container {
     margin: auto;
@@ -185,6 +206,26 @@ ul:hover {
     flex-grow: 1;
     max-height: 95%;
 }
+
+#pagination_container {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    font-size: 100px;
+}
+#pagination_container > div:hover {
+    cursor: pointer;
+}
+#pagination_container input {
+    text-align: center;
+    width: 22px;
+}
+#pagination_container input::-webkit-outer-spin-button,
+#pagination_container input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 #email_header {
     font-weight: bold;
 }
@@ -192,6 +233,7 @@ ul:hover {
     cursor: pointer;
 }
 #email_header .column span {
+    display: inline-block;
     font-size: 10px;
 }
 #email_table {
@@ -249,18 +291,25 @@ ul:hover {
     margin-right: 10px;
     border-right: 1px solid var(--light_gray);
 }
+.column span {
+    overflow: visible;
+}
 .read {
     min-width: 70px;
     max-width: 70px;
     text-align: center;
 }
+.sender {
+    min-width: 75px;
+    width: 10%;
+}
 .recipients {
     min-width: 90px;
-    width: 25%;
+    width: 20%;
 }
 .subject {
     min-width: 70px;
-    width: 25%;
+    width: 20%;
 }
 .message {
     width: 67%;
