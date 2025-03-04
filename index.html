@@ -8,7 +8,19 @@
     </div>
 </script>
 <script type="text/template" id="email_preview_template">
-    <div style="position:absolute;right:5%;top:1%" onclick="Events.closeEmailPreview()" id="close_preview_button" class="red-text">X</div>
+    <div data-id="%id%" class="email-reply-chain">
+        <div class="email-preview-action-buttons">
+            <div id="reply_to_email" class="clickable" title="Reply">&#8618;</div>
+            <div id="close_preview_button" class="clickable red-text">&#215;</div>
+        </div>
+        %email_reply_chain%
+    </div>
+</script>
+<script type="text/template" id="email_reply_preview_template">
+    <div style="position: relative;">
+        <hr style="border: 1px solid black; margin: 20px 0px;">
+        <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--white); padding: 0px 10px;">%time_created%</div>
+    </div>
     <div><b>Sender:</b> %sender%</div>
     <div><b>Recipients:</b> %recipients%</div>
     <div><b>Subject:</b> %subject%</div>
@@ -17,11 +29,11 @@
 <script type="text/template" id="new_email_template">
     <div class="field-row">
         <label for="email_modal_recipients">Recipients</label>
-        <input id="email_modal_recipients" type="text" autocomplete="off"></input>
+        <input id="email_modal_recipients" class="required" type="text" autocomplete="off"></input>
     </div>
     <div class="field-row">
         <label for="email_modal_subject">Subject</label>
-        <input id="email_modal_subject" type="text" autocomplete="off"></input>
+        <input id="email_modal_subject" class="required" type="text" autocomplete="off"></input>
     </div>
     <div class="field-row">
         <label for="email_modal_message">Message</label>
@@ -62,6 +74,28 @@
 <script type="text/template" id="breadcrumb_template">
     <div class="breadcrumbs" data-id="%id%"><b>%name%</b></div>
 </script>
+<script type="text/template" id="reply_email_template">
+    <div class="field-row">
+        <label for="reply_email_subject">Subject</div>
+        <div id="reply_email_subject">%subject%</div>
+    </div>
+    <div class="field-row">
+        <label for="reply_email_message">Message</div>
+        <div id="reply_email_message">%message%</div>
+    </div>
+    <div class="field-row">
+        <label for="response_subject">Response Subject</label>
+        <input id="response_subject" class="required" type="text" autocomplete="off" />
+    </div>
+    <div class="field-row">
+        <label for="response_message">Response Message</label>
+        <textarea id="response_message" class="required"></textarea>
+    </div>
+    <div class="modal-buttons">
+        <div id="save_button" class="button">Reply</div>
+        <div id="close_button" class="button">Close</div>
+    </div>
+</script>
 
 <head>
     <script src="index.js" type="text/javascript"></script>
@@ -71,11 +105,12 @@
     <div class="widget" current-tab="inbox">
         <div id="email_nav">
             <div id="breadcrumbs">
-                <div class="breadcrumbs" data-id="-1"><b>Home</b></div>
+                <div class="breadcrumbs clickable" data-id="-1"><b>Home</b></div>
             </div>
             <div id="search_and_tabs">
                 <div id="search_bar">
                     <input placeholder="Search..." type="text" autocomplete="off"/>
+                    <div class="red-text hidden clickable" style="position: relative; right: 20px;" id="clear_search_bar">&#215;</div>
                 </div>
                 <div id="tabs">
                     <div id="inbox_button" class="button active">Inbox</div>
@@ -96,11 +131,11 @@
                 </div>
                 <div id="email_body"></div>
             </div>
-            <div id="email_preview"></div>
+            <div id="email_preview" class="hidden"></div>
         </div>
         <div id="pagination_container">
             <div id="pagination_turn_left">&#8592;</div>
-            <div id="pagination_page"><input type="number" value="1" autocomplete="false"></div>
+            <div id="pagination_page"><input type="number" value="1" autocomplete="off"/></div>
             <div id="pagination_turn_right">&#8594;</div>
         </div>
     </div>
@@ -109,6 +144,7 @@
 <ul id="email_row_dropdown">
     <li data-action="new_email">New Email</li>
     <li data-action="edit_email">Edit Email</li>
+    <li data-action="reply">Reply to Email</li>
     <li data-action="create_folder">Create Folder</li>
     <li data-action="move_to_folder">Move to Folder</li>
     <li data-action="mark_read" id="mark_read_option">Mark Read</li>

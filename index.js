@@ -1,3 +1,12 @@
+const getRandomFutureDate = function () {
+    const today = new Date();
+    const randomDays = Math.floor(Math.random() * 365) + 1;
+
+    const futureDate = new Date();
+    futureDate.setDate(today.getDate() + randomDays);
+    return futureDate;
+};
+
 HTMLElement.prototype.bindEmailRowEvents = function () {
     const $emailRow = this;
 
@@ -137,8 +146,11 @@ Class.Contact = class extends idHandler {
     }
 }
 Class.Contact.setupIds();
+
 Class.Email = class extends idHandler {
-    constructor (is_read, subject, message, recipients, parent, sender) {
+    static thread_ids = new Array(10).fill(undefined);
+
+    constructor (is_read, subject, message, recipients, parent, sender, thread_id) {
         super();
         this.id = this.constructor.getNextId();
         this.constructor.ids[this.id] = true;
@@ -147,8 +159,26 @@ Class.Email = class extends idHandler {
         this.message = message;
         this.sender = sender;
         this.parent = parent ?? -1;
+        this.date_created = thread_id ? getRandomFutureDate() : new Date(),
+        this.thread_id = thread_id ?? Class.Email.getNextThreadId();
+        if (thread_id === undefined) {
+            Class.Email.thread_ids[this.thread_id] = this.id;
+        }
         this.updateRecipients(recipients);
         this.updateSender(sender);
+    }
+
+    static getNextThreadId () {
+        let index = 0;
+        while (index < Class.Email.thread_ids.length) {
+            if (Class.Email.thread_ids[index] === undefined) {
+                return index;
+            }
+            index++;
+        }
+        Class.Email.thread_ids.length *= 2;
+        Class.Email.thread_ids.fill(undefined, index, Class.Email.thread_ids.length);
+        return index;
     }
 
     updateSender (sender) {
@@ -177,6 +207,7 @@ Class.Email = class extends idHandler {
     }
 }
 Class.Email.setupIds();
+
 Class.Folder = class extends idHandler {
     constructor (name, parent) {
         super();
@@ -371,11 +402,21 @@ Class.Resource = class extends EventTarget {
     }
 
     set searchText (value) {
-        this._searchText = value.toLowerCase().trim();
+        const newValue = value.toLowerCase().trim();
+        
+        if (newValue !== this._searchText) {
+            this._searchText = newValue;
+            const searchTextUpdateEvent = new CustomEvent("searchstateupdate", {
+                detail: {
+                    searching: this.isSearching()
+                }
+            });
+            this.dispatchEvent(searchTextUpdateEvent);
+        }
     }
 
     isSearching () {
-        return this.searchText !== "";
+        return this._searchText !== "";
     }
 }
 
@@ -410,12 +451,13 @@ Email.UI = {
             if (item instanceof Class.Folder) {
                 return self.tab === "inbox";
             }
-            return self.tab === "inbox" ? item.recipients.includes(0) : item.sender === 0; 
+            return self.tab === "inbox" ? item.recipients.includes(0) && Class.Email.thread_ids[item.thread_id] === item.id : item.sender === 0; 
         };
     }),
     templates: {
         breadcrumbs: document.getElementById("breadcrumb_template").innerHTML,
         emailPreviewTemplate: document.getElementById("email_preview_template").innerHTML,
+        emailReplyTemplate: document.getElementById("email_reply_preview_template").innerHTML,
         rowTemplate: document.getElementById("row_template").innerHTML
     },
     init: function () {
@@ -528,11 +570,18 @@ Email.UI = {
         Email.UI.Elements.email_table.querySelector("#email_header").querySelectorAll(".column").forEach($emailColumn => {
             $emailColumn.addEventListener("click", Events.applySort);
         });
-        document.getElementById("search_bar").addEventListener("input", e => {
+        document.querySelector("#search_bar input").addEventListener("input", e => {
             Email.UI.Resource.searchText = e.target.value;
-            if (e.data === null || Email.UI.Resource.isSearching()) {
-                Email.UI.buildTable(false, true);
-            }
+        });
+        document.getElementById("clear_search_bar").addEventListener("click", e => {
+            const searchBar = document.querySelector("#search_bar input"); 
+            searchBar.value = "";
+
+            const inputEvent = new Event("input", {
+                bubbles: true,
+                cancelable: true
+            });
+            searchBar.dispatchEvent(inputEvent);
         });
         document.getElementById("tabs").childNodes.forEach($tab => {
             $tab.addEventListener("click", Events.switchTab);
@@ -555,19 +604,40 @@ Email.UI = {
                 Email.UI.buildTable(true, false);
             }
         });
+        Email.UI.Resource.addEventListener("searchstateupdate", e => {
+            if (e.detail.searching) {
+                document.getElementById("clear_search_bar").classList.remove("hidden");
+            } else {
+                document.getElementById("clear_search_bar").classList.add("hidden");
+            }
+            Email.UI.buildTable(false, true);
+        });
     },
     showEmailPreview: function (emailId) {
         let email = Util.getEmail(emailId);
-        email.is_read = true;
-        let emailHtml = Util.templateHelper(Email.UI.templates.emailPreviewTemplate, {
-            sender: email.sender_string,
-            recipients: email.recipients_string,
-            subject: email.subject,
-            message: email.message
+
+        const emailsInThread = Util.getEmailThread(email.thread_id);
+        const emailsInThreadHtml = emailsInThread.reduce((memo, currentEmail) => {
+            return memo + Util.templateHelper(Email.UI.templates.emailReplyTemplate, {
+                sender: currentEmail.sender_string,
+                recipients: currentEmail.recipients_string,
+                subject: currentEmail.subject,
+                message: currentEmail.message,
+                time_created: Util.formatDate(currentEmail.date_created)
+            });
+        }, "");
+        const emailHtml = Util.templateHelper(Email.UI.templates.emailPreviewTemplate, {
+            id: emailId,
+            email_reply_chain: emailsInThreadHtml
         });
+        
         Email.UI.Elements.email_preview.innerHTML = emailHtml;
-        Email.UI.Elements.email_preview.style.display = "block";
-        Email.UI.markHtmlRead(email);
+        Email.UI.Elements.email_preview.classList.remove("hidden");
+        Email.UI.Elements.email_preview.querySelector("#reply_to_email").addEventListener("click", Events.replyToEmail);
+        Email.UI.Elements.email_preview.querySelector("#close_preview_button").addEventListener("click", Events.closeEmailPreview);
+
+        Email.UI.Elements.email_body.querySelector(".table-row.previewing")?.classList.remove("previewing");
+        Email.UI.Elements.email_body.querySelector(Util.getIdSelector(email.id)).classList.add("previewing");
     },
     updateEmailRowValues: function (email) {
         let $row = Email.UI.Elements.email_body.querySelector(Util.getIdSelector(email.id));
@@ -577,7 +647,7 @@ Email.UI = {
         $row.querySelector(".column.message").innerHTML = email.message;
     },
     markHtmlRead: function (email) {
-        let $row = Email.UI.Elements.email_body.querySelector(Util.getIdSelector(email.id));
+        let $row = Email.UI.Elements.email_table.querySelector(Util.getIdSelector(email.id) + ":not([data-is-folder='1'])");
         $row.querySelector(".read").innerHTML = "";
     },
     deleteRow: function (id) {
@@ -630,12 +700,21 @@ let Events = {
             dropdownOption.addEventListener("click", handleDropdownClick);
         });
     },
+    clearSearch: function (e) {
+        Email.UI.Resource.clearSearch();
+
+    },
     showEmailPreview: function (e) {
         const emailId = e.target.closest(".table-row").dataset.id;
+        Email.UI.markHtmlRead(Util.getEmail(emailId));
         Email.UI.showEmailPreview(emailId);
     },
+    replyToEmail: function (e) {
+        const emailId = e.target.closest("div[data-id]").dataset.id;
+        Dropdowns.email_row_dropdown.reply(emailId);
+    },
     closeEmailPreview: function (e) {
-        Email.UI.Elements.email_preview.style.display = "none";
+        Email.UI.Elements.email_preview.classList.add("hidden");
     },
     applySort: function (e) {
         const $header = e.target.closest(".header");
@@ -729,39 +808,43 @@ let Util = {
     getFolder: function (id) {
         return Email.UI.Resource.getSingle(id, true);
     },
+    getEmailThread: function (thread_id) {
+        let emailArray = Email.UI.Resource.currentItems.filter(e => e.thread_id == thread_id);
+        emailArray.sort((a,b) => a.date_created - b.date_created);
+        return emailArray;
+    },
     getIdSelector: function (id) {
         return ".table-row[data-id='" + id + "']";
     },
+    formatDate: function (dateObj) {
+        const isDate = function (comparingDate) {
+            return dateObj.getFullYear() === comparingDate.getFullYear() && dateObj.getMonth() === comparingDate.getMonth() && dateObj.getDate() === comparingDate.getDate();
+        }
+
+        if (isDate(new Date())) {
+            return "Today";
+        }
+
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate()-1);
+        if (isDate(yesterday)) {
+            return "Yesterday";
+        }
+
+        return dateObj.toLocaleString('en-US', {
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+        });
+    },
     templateHelper: function (template, obj) {
         let html = template;
-        for (const [key, value] of Object.entries(obj)) {
-            html = html.replaceAll('%' + key + '%', value);
+        if (obj !== undefined) {
+            for (const [key, value] of Object.entries(obj)) {
+                html = html.replaceAll('%' + key + '%', value);
+            }
         }
         return html;
-    },
-    filterResources: function () {
-        Email.UI.Resource.filteredItems = Email.UI.Resource.currentItems.filter(email => email.parent == Email.UI.Resource.parent);
-        Email.UI.Resource.filteredParents = Email.UI.Resource.currentParents.filter(folder => folder.parent == Email.UI.Resource.parent);
-    },
-    sortResources: function () {
-        let compareFunction;
-        if (Email.UI.Resource.itemSortType === "recipients_string" || Email.UI.Resource.itemSortType === "subject" || Email.UI.Resource.itemSortType === "message") {
-            compareFunction = function (a, b) {
-                return a[Email.UI.Resource.itemSortType].localeCompare(b[Email.UI.Resource.itemSortType]);
-            }
-        } else {
-            compareFunction = function (a, b) {
-                return a[Email.UI.Resource.itemSortType] - b[Email.UI.Resource.itemSortType];
-            }
-        }
-        Email.UI.Resource.filteredItems.sort(compareFunction);
-        Email.UI.Resource.filteredParents.sort(function (a,b) {
-            return a.name.localeCompare(b.name);
-        });
-        if (Email.UI.Resource.sortDir === "desc") {
-            Email.UI.Resource.filteredItems.reverse();
-            Email.UI.Resource.filteredParents.reverse();
-        }
     },
     selectFolder: function (excludedFolder) {
         return new Promise((resolve, reject) => {
@@ -871,6 +954,12 @@ let Util = {
         for (let i = 0; i < numberEmails; i++) {
             let email = new Class.Email(Math.random() < 0.5, getRandomNumberWords(5, 15), getRandomNumberWords(60, 120), [0, ...Array.from({ length: getRandomNumber(1, Master.Storage.contacts.length)}, () => getRandomContactId())], -1, getRandomNumber(0, 1) === 0 ? 0 : getRandomContactId());
             Email.UI.Resource.currentItems.push(email);
+
+            const numReplies = Math.floor(Math.random() * 5);
+            for (let i = 0; i < numReplies; i++) {
+                let emailReply = new Class.Email(false, getRandomNumberWords(5,15), getRandomNumberWords(60,120), email.recipients, email.parent, email.recipients[getRandomNumber(0, email.recipients.length - 1)], email.thread_id);
+                Email.UI.Resource.currentItems.push(emailReply);
+            }
         }
     },
     generateFolders: function (numberFolders) {
@@ -896,7 +985,8 @@ let Util = {
 let ModalMenu = {
     templates: {
         "new_email_template": document.getElementById("new_email_template").innerHTML,
-        "generic_input_template": document.getElementById("generic_input_template").innerHTML
+        "generic_input_template": document.getElementById("generic_input_template").innerHTML,
+        "reply_email_template": document.getElementById("reply_email_template").innerHTML
     },
     loadedModals: [],
     open: function (options) {
@@ -926,6 +1016,10 @@ let ModalMenu = {
             ModalEvents[options.template].bindEvents($modal);
         }
         $modal.querySelector("#save_button").addEventListener("click", function (e) {
+            if (!ModalEvents.validateForm($modal)) {
+                return false;
+            }
+
             let returnData = ModalEvents[options.template].gatherData($modal);
             options.buttons.save(returnData);
             ModalMenu.close($modal);
@@ -950,6 +1044,18 @@ let ModalMenu = {
 };
 
 let ModalEvents = {
+    validateForm: function ($modal) {
+        let isValid = true;
+        $modal.querySelectorAll(".required").forEach($field => {
+            if ($field.value.trim() === "") {
+                isValid = false;
+                $field.classList.add("modal-error");
+            } else {
+                $field.classList.remove("modal-error");
+            }
+        });
+        return isValid;
+    },
     new_email_template: {
         setDefaultValues: function ($modal, email) {
             if (email === undefined) {
@@ -963,7 +1069,7 @@ let ModalEvents = {
             }
         },
         gatherData: function ($modal) {
-            let data = {
+            const data = {
                 recipients: $modal.querySelector("#email_modal_recipients").value,
                 subject: $modal.querySelector("#email_modal_subject").value,
                 message: $modal.querySelector("#email_modal_message").value
@@ -979,6 +1085,7 @@ let ModalEvents = {
     },
     generic_input_template: {
         setDefaultValues: function ($modal, item) {
+            $modal.querySelector("#preset_value").classList.add("required");
             $modal.querySelector("#preset_value").value = item.name;
         },
         gatherData: function ($modal) {
@@ -997,6 +1104,18 @@ let ModalEvents = {
                     return undefined;
             }
         },
+    },
+    reply_email_template: {
+        setDefaultValues: function ($modal, item) {
+
+        },
+        gatherData: function ($modal) {
+            const data = {
+                subject: $modal.querySelector("#response_subject").value,
+                message: $modal.querySelector("#response_message").value
+            };
+            return data;
+        }
     }
 };
 
@@ -1073,6 +1192,27 @@ let Dropdowns = {
                         email.subject = data.subject;
                         email.message = data.message;
                         Email.UI.updateEmailRowValues(email);
+                    }
+                }
+            });
+        },
+        reply: function (id) {
+            let email = Util.getEmail(id);
+            ModalMenu.open({
+                id: "reply_email",
+                template: "reply_email_template",
+                item: email,
+                names: {
+                    subject: email.subject,
+                    message: email.message
+                },
+                buttons: {
+                    save: function (data) {
+                        let replyEmail = new Class.Email(false, data.subject, data.message, email.recipients, email.parent, 0, email.thread_id);
+                        Email.UI.Resource.currentItems.push(replyEmail);
+                        if (!Email.UI.Elements.email_preview.classList.contains("hidden")) {
+                            Email.UI.showEmailPreview(email.id);
+                        }
                     }
                 }
             });
