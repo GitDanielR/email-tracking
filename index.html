@@ -10,8 +10,8 @@
 <script type="text/template" id="email_preview_template">
     <div data-id="%id%" class="email-reply-chain">
         <div class="email-preview-action-buttons">
-            <div id="reply_to_email" class="clickable" title="Reply">&#8618;</div>
-            <div id="close_preview_button" class="clickable red-text">&#215;</div>
+            <div id="reply_to_email" class="clickable multiselect-ignore" title="Reply">&#8618;</div>
+            <div id="close_preview_button" class="clickable red-text multiselect-ignore">&#215;</div>
         </div>
         %email_reply_chain%
     </div>
@@ -96,6 +96,15 @@
         <div id="close_button" class="button">Close</div>
     </div>
 </script>
+<!-- Based on https://www.youtube.com/watch?v=9huP_P4n0Bs&list=PLNCevxogE3fjKtbhkp-McVz-kHWIXm5yB&index=5 -->
+<script type="text/template" id="loading_spinner">
+    <div class="loading-spinner-container">
+        <div></div>
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+</script>
 
 <head>
     <script src="index.js" type="text/javascript"></script>
@@ -120,7 +129,7 @@
         </div>
         <div id="email_container">
             <div id="email_table">
-                <div id="email_header" class="header">
+                <div id="email_header" class="header hidden">
                     <div class="table-row">
                         <div class="column read" data-sort="is_read">Read <span>&#9650;</span></div>
                         <div class="column sender" data-sort="sender_string">Sender <span class="hidden">&#9650;</span></div>
@@ -136,9 +145,12 @@
         <div id="pagination_container">
             <div id="pagination_turn_left">&#8592;</div>
             <div id="pagination_page"><input type="number" value="1" autocomplete="off"/></div>
+            <div class="no-pointer">of <span id="pagination_number_pages">1</span> page<span id="pagination_plural"></span></div>
             <div id="pagination_turn_right">&#8594;</div>
         </div>
     </div>
+
+    <div id="ignite_toast_container"></div>
 </body>
 
 <ul id="email_row_dropdown">
