@@ -18,6 +18,8 @@
     --dark_pink: #f7014f;
     --light_purple: #da00f7;
     --dark_purple: #b501f6;
+    --light_red: #ed7777;
+    --very_light_gray: #ece9e9;
 }
 * {
     box-sizing: border-box;
@@ -48,6 +50,9 @@
 }
 .zero-opacity {
     opacity: 0;
+}
+.open {
+    display: block !important;
 }
 
 ul {
@@ -359,6 +364,7 @@ ul:hover {
     justify-content: flex-end;
     width: 100%;
     gap: 10px;
+    z-index: 1;
 }
 #email_container #email_preview .email-preview-action-buttons > * {
     width: 40px;
@@ -460,4 +466,45 @@ ul:hover {
     height: 40px;
     min-width: 100px;
     transition: opacity 0.5s;
+}
+
+.chips {
+    position: relative;
+    z-index: 1;
+}
+.chips .chips-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 7px;
+    top: 21%;
+    margin: 0px 10px;
+}
+.chips input {
+    height: 30px;
+    width: 100%;
+}
+.chips .chips-container .chip {
+    padding: 2px 15px;
+    border: 1px solid var(--dark_gray);
+    border-radius: 15px;
+    height: 22px;
+}
+.chips .chips-container .chip:hover {
+    background-color: var(--light_red);
+}
+.chips .chips-dropdown {
+    width: 100%;
+    background-color: var(--very_light_gray);
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    max-height: 15vh;
+    overflow-y: auto;
+}
+.chips .chips-dropdown .chips-dropdown-option {
+    padding: 15px;
+}
+.chips .chips-dropdown .chips-dropdown-option:hover {
+    background-color: var(--light_gray);
 }

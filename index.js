@@ -21,7 +21,7 @@ HTMLElement.prototype.multiSelect = function(options) {
         });
     };
     const checkClear = function (e) {
-        if (!e.target.classList.contains("multiselect-ignore") && e.target.closest(options.selector + "[data-multi-selectable='true']") === null) {
+        if (e.target.closest(".multiselect-ignore") === null && e.target.closest(options.selector + "[data-multi-selectable='true']") === null) {
             clearAll();
         }
     };
@@ -42,7 +42,6 @@ HTMLElement.prototype.multiSelect = function(options) {
     }
     
     let currOptions = Object.assign({}, options);
-    currOptions.selectedSelector = currOptions.selector + "[data-multi-selected='true']";
     currOptions.$container.classList.add("multi-container");
 
     const markSelected = function ($targetRow, $lastSelected) {
@@ -84,6 +83,75 @@ HTMLElement.prototype.multiSelect = function(options) {
         $row.addEventListener("mousedown", handleClick);
     });
     document.addEventListener("mousedown", checkClear);
+};
+
+HTMLElement.prototype.materialChip = function (options) {
+    const self = this;
+    if (options === "get") {
+        return Array.from(self.querySelector(".chips-container").children).map($chip => parseInt($chip.dataset.id));
+    }
+    
+    let currOptions = Object.assign({}, options);
+    currOptions.selected = new Set(options.preselect);
+    
+    self.innerHTML = document.getElementById("material_chip").innerHTML;
+    const $chipContainer = self.querySelector(".chips-container");
+    const $input = self.querySelector("input");
+    const $dropdown = self.querySelector(".chips-dropdown");
+
+    const deleteSelectedChip = function (e) {
+        currOptions.selected.delete(parseInt(e.target.dataset.id));
+        e.target.remove();
+        buildDropdown();
+    };
+    const selectChip = function (e) {
+        $input.value = "";
+        const item = currOptions.data.find(item => item.id == e.target.dataset.id);
+        
+        const chipHtml = `<div class="chip" data-id=${item.id}>${item.label}</div>`;
+        if (currOptions.single) {
+            $chipContainer.innerHTML = chipHtml;
+            currOptions.selected.clear();
+        } else {
+            $chipContainer.innerHTML += chipHtml;
+        }
+        currOptions.selected.add(item.id);
+        e.target.remove();
+    };
+    const buildDropdown = function (e) {
+        const search = $input.value;
+        const dropdownOptions = currOptions.data.filter(item => !currOptions.selected.has(item.id) && item.label.toLowerCase().includes(search));
+        $dropdown.innerHTML = dropdownOptions.reduce((aggregate, item) => {
+            return aggregate + `<div class="chips-dropdown-option" data-id=${item.id}>${item.label}</div>`;
+        }, "");
+        $dropdown.querySelectorAll(".chips-dropdown-option").forEach($dropdownOption => {
+            $dropdownOption.addEventListener("click", selectChip);
+        });
+    };
+    const checkHideDropdown = function (e) {
+        if (e.target.closest("input") === null && e.target.closest(".chips-dropdown") === null) {
+            $dropdown.classList.add("hidden");
+        }
+    };
+
+    $input.addEventListener("input", buildDropdown);
+    $input.addEventListener("focusin", e => $dropdown.classList.remove("hidden"));
+    $chipContainer.addEventListener("click", e => { 
+        if (e.target.classList.contains("chip")) {
+            deleteSelectedChip(e);
+        } else {
+            $input.focus(); 
+        }
+    });
+    document.addEventListener("mousedown", checkHideDropdown);
+    buildDropdown();
+
+    if (currOptions.preselect !== undefined) {
+        $chipContainer.innerHTML = currOptions.preselect.reduce((aggregate, itemId) => {
+            return aggregate + `<div class="chip" data-id=${itemId}>${currOptions.data.find(i => i.id === itemId).label}</div>`;
+        }, "");
+    }
+    $dropdown.classList.add("hidden");
 };
 
 class idHandler {
@@ -478,7 +546,7 @@ Email.UI = {
         setTimeout(() => {
             this.bindSingleEvents();
             this.buildTable();
-        }, 6000);
+        }, 1000);
     },
     getContainers: function() {
         Email.UI.Elements.email_body = document.getElementById("email_body");
@@ -691,7 +759,6 @@ Email.UI = {
 
 let Events = {
     showDropdownOptions: function (e) {
-        console.log('dropdown')
         e.preventDefault();
 
         let $rowWithDropdown = e.target.closest(".dropdown-row"); 
@@ -1046,7 +1113,7 @@ let ModalMenu = {
             ModalEvents[options.template].setDefaultValues($modal, options.item);
         }
         if (ModalEvents[options.template].bindEvents !== undefined) {
-            ModalEvents[options.template].bindEvents($modal);
+            ModalEvents[options.template].bindEvents($modal, options.item);
         }
         $modal.querySelector("#save_button").addEventListener("click", function (e) {
             e.stopPropagation();
@@ -1082,7 +1149,14 @@ let ModalEvents = {
     validateForm: function ($modal) {
         let isValid = true;
         $modal.querySelectorAll(".required").forEach($field => {
-            if ($field.value.trim() === "") {
+            if ($field.classList.contains("chips")) {
+                if ($field.querySelector(".chips-container").childNodes.length === 0) {
+                    isValid = false;
+                    $field.classList.add("modal-error");
+                } else {
+                    $field.classList.remove("modal-error");
+                }
+            } else if ($field.value.trim() === "") {
                 isValid = false;
                 $field.classList.add("modal-error");
             } else {
@@ -1094,27 +1168,35 @@ let ModalEvents = {
     new_email_template: {
         setDefaultValues: function ($modal, email) {
             if (email === undefined) {
-                $modal.querySelector("#email_modal_recipients").value = "";
                 $modal.querySelector("#email_modal_subject").value = "";
                 $modal.querySelector("#email_modal_message").value = "";
             } else {
-                $modal.querySelector("#email_modal_recipients").value = email.recipients_string;
                 $modal.querySelector("#email_modal_subject").value = email.subject;
                 $modal.querySelector("#email_modal_message").value = email.message;
             }
         },
         gatherData: function ($modal) {
             const data = {
-                recipients: $modal.querySelector("#email_modal_recipients").value,
+                recipients: $modal.querySelector("#email_modal_recipients").materialChip("get"),
                 subject: $modal.querySelector("#email_modal_subject").value,
                 message: $modal.querySelector("#email_modal_message").value
             };
             return data;
         },
-        bindEvents: function ($modal) {
+        bindEvents: function ($modal, email) {
             $modal.querySelector("textarea").addEventListener("input", function () {
                 this.style.height = "auto";
                 this.style.height = Math.min(this.scrollHeight + 5, "450") + "px";
+            });
+            $modal.querySelector("#email_modal_recipients").materialChip({
+                data: Master.Storage.contacts.map(c => {
+                    return {
+                        id: c.id,
+                        label: c.displayName
+                    }
+                }),
+                preselect: email?.recipients,
+                single: false
             });
         }
     },
@@ -1202,8 +1284,7 @@ let Dropdowns = {
                 },
                 buttons: {
                     save: function (data) {
-                        let recipientArray = Util.getContactIdsFromNames(data.recipients);
-                        let email = new Class.Email(false, data.subject, data.message, recipientArray, -1, 0);
+                        let email = new Class.Email(false, data.subject, data.message, data.recipients, -1, 0);
                         Email.UI.Resource.currentItems.push(email);
                         Email.UI.buildTable();
                         Ignite.toast("Email sent", 3000);
@@ -1223,8 +1304,7 @@ let Dropdowns = {
                 },
                 buttons: {
                     save: function (data) {
-                        let recipientArray = Util.getContactIdsFromNames(data.recipients);
-                        email.updateRecipients(recipientArray);
+                        email.updateRecipients(data.recipients);
                         email.subject = data.subject;
                         email.message = data.message;
                         Email.UI.updateEmailRowValues(email);

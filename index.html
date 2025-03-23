@@ -29,7 +29,7 @@
 <script type="text/template" id="new_email_template">
     <div class="field-row">
         <label for="email_modal_recipients">Recipients</label>
-        <input id="email_modal_recipients" class="required" type="text" autocomplete="off"></input>
+        <div id="email_modal_recipients" class="chips required"></div>
     </div>
     <div class="field-row">
         <label for="email_modal_subject">Subject</label>
@@ -104,6 +104,11 @@
         <div></div>
         <div></div>
     </div>
+</script>
+<script type="text/template" id="material_chip">
+    <div class="chips-container" style="position: absolute;"></div>
+    <input type="text" autocomplete="off" />
+    <div class="chips-dropdown" style="position: absolute;"></div>
 </script>
 
 <head>
